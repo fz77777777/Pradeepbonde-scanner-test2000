@@ -65,46 +65,75 @@ with st.sidebar:
     target_offset = offset_mapping[scan_mode]
 
 # ==========================================
-# DYNAMIC 2000+ INDIAN TICKER LOADER (NO MICROCAPS)
+# DYNAMIC 2000+ INDIAN TICKER LOADER (BULLETPROOF)
 # ==========================================
 @st.cache_data(ttl=86400)
 def load_indian_mega_universe_clean():
-    """Builds a pure pool of 2000+ large, mid, and small cap Indian stocks, excluding microcaps"""
+    """Builds a robust pool of 2000+ large, mid, and small cap Indian stocks without relying on strict column cases"""
+    base_pool = []
+    
+    # STEP 1: Load Nifty 500 (Core Base)
     try:
-        # Base: Nifty 500 (Covering all Large, Mid, and Small Cap core benchmarks)
         url_500 = "https://archives.nseindia.com/content/indices/ind_nifty500list.csv"
         df_500 = pd.read_csv(url_500)
         
-        df_500['Sector'] = df_500['Industry'].fillna('Other Sectors')
-        df_500['Symbol_YF'] = df_500['Symbol'] + ".NS"
-        base_pool = df_500[['Symbol_YF', 'Company Name', 'Sector']].to_dict('records')
-        
-        # Pulling mainstream liquid assets directly from full NSE trading list
+        # Standardize all columns to uppercase
+        df_500.columns = [c.upper().strip() for c in df_500.columns]
+        symbol_col = 'SYMBOL' if 'SYMBOL' in df_500.columns else df_500.columns[2]
+        industry_col = 'INDUSTRY' if 'INDUSTRY' in df_500.columns else df_500.columns[3]
+        company_col = 'COMPANY NAME' if 'COMPANY NAME' in df_500.columns else df_500.columns[0]
+
+        for _, row in df_500.iterrows():
+            yf_symbol = str(row[symbol_col]).strip() + ".NS"
+            base_pool.append({
+                'Symbol_YF': yf_symbol,
+                'Company Name': row[company_col],
+                'Sector': row[industry_col] if pd.notna(row[industry_col]) else 'Core Sector'
+            })
+    except Exception as e:
+        st.warning(f"Nifty 500 parse alert (Using direct stream fallback): {e}")
+
+    # STEP 2: Fetch and merge full NSE Equities List safely to scale to 2000+
+    try:
         url_total = "https://archives.nseindia.com/content/equities/EQUITY_L.csv"
         df_total = pd.read_csv(url_total)
         
-        # strictly filter active equities (EQ series) and exclude speculative trade-to-trade segments
-        df_total = df_total[df_total['SERIES'] == 'EQ'] 
+        # Standardize columns to uppercase to completely bypass key errors like 'SERIES'
+        df_total.columns = [c.upper().strip() for c in df_total.columns]
         
+        symbol_col = 'SYMBOL' if 'SYMBOL' in df_total.columns else df_total.columns[0]
+        name_col = 'NAME OF COMPANY' if 'NAME OF COMPANY' in df_total.columns else df_total.columns[1]
+        series_col = 'SERIES' if 'SERIES' in df_total.columns else (df_total.columns[2] if len(df_total.columns) > 2 else None)
+        
+        # Filter active standard equities safely
+        if series_col and series_col in df_total.columns:
+            df_total = df_total[df_total[series_col].astype(str).str.upper().str.strip() == 'EQ']
+            
         existing_symbols = {r['Symbol_YF'] for r in base_pool}
         
-        # Scaling smoothly up to 2000+ tickers while keeping order-book volume integrity high
         for _, row in df_total.iterrows():
-            yf_symbol = row['SYMBOL'] + ".NS"
+            ticker = str(row[symbol_col]).strip()
+            if not ticker or ticker.lower() == 'symbol':
+                continue
+                
+            yf_symbol = ticker + ".NS"
             if yf_symbol not in existing_symbols:
-                # Filter out obvious illiquid micro-caps by skipping symbols without historical sector tags
                 base_pool.append({
                     'Symbol_YF': yf_symbol,
-                    'Company Name': row['NAME OF COMPANY'],
+                    'Company Name': row[name_col] if name_col in df_total.columns else ticker,
                     'Sector': 'Broad Market / Mid-Small'
                 })
-            if len(base_pool) >= 2050: # Safe ceiling for 2000+ multi-cap stocks range
+            if len(base_pool) >= 2150: # Safe target wall for 2000+ stocks universe
                 break
-                
-        return pd.DataFrame(base_pool)
     except Exception as e:
-        st.error(f"Error initializing Clean Indian Stock Universe: {e}")
-        return pd.DataFrame([{'Symbol_YF': 'RELIANCE.NS', 'Company Name': 'Reliance Industries', 'Sector': 'Energy'}])
+        st.error(f"Fatal error pulling broad market array: {e}")
+        
+    # Final solid fallback to ensure app never launches with 0 stocks
+    if len(base_pool) < 10:
+        emergency_stocks = ['RELIANCE', 'TCS', 'INFY', 'HDFCBANK', 'ICICIBANK', 'BHARTIARTL', 'SBIN', 'LTIM', 'TATAMOTORS', 'ITC']
+        return pd.DataFrame([{'Symbol_YF': f'{s}.NS', 'Company Name': f'{s} Ltd', 'Sector': 'Benchmark'} for s in emergency_stocks])
+        
+    return pd.DataFrame(base_pool)
 
 master_universe = load_indian_mega_universe_clean()
 TICKER_LIST = master_universe['Symbol_YF'].tolist()
