@@ -45,7 +45,7 @@ with st.sidebar:
     st.write("---")
     st.header("⚙️ Structure & Timeline Filters")
     
-    # NEW: Multi-Timeframe Selection Engine
+    # Multi-Timeframe Selection Engine
     timeframe_filter = st.selectbox(
         "Select Data Timeframe",
         options=["Daily", "Weekly", "Monthly"],
@@ -169,11 +169,9 @@ st.info(f"📋 **System Matrix Configured:** **{len(TICKER_LIST)} Stocks** loade
 # ==========================================
 @st.cache_data(ttl=1800)
 def fetch_indian_data_batch(tickers, tf):
-    # Timeframe handling
     interval_map = {"Daily": "1d", "Weekly": "1wk", "Monthly": "1mo"}
     yf_interval = interval_map[tf]
     
-    # Requesting a longer lookback string for weekly/monthly calculations
     end_date = datetime.today().strftime('%Y-%m-%d')
     start_date = (datetime.today() - timedelta(days=1200)).strftime('%Y-%m-%d')
     
@@ -189,7 +187,7 @@ if st.button(f"🔍 RUN {timeframe_filter.upper()} MULTI-STRATEGY SCANNER"):
     with st.spinner("Downloading dynamic market intervals via Parallel Engine..."):
         all_data = fetch_indian_data_batch(TICKER_LIST, timeframe_filter)
         
-    st.write(f"⚙️ Parsing Pradeep Bonde structural constraints with extended 60-Bar Lookback...")
+    st.write(f"⚙️ Parsing Pradeep Bonde structural constraints with ultra-strict consolidation logic...")
     scanned_data_pool = []
     
     for ticker in TICKER_LIST:
@@ -199,7 +197,6 @@ if st.button(f"🔍 RUN {timeframe_filter.upper()} MULTI-STRATEGY SCANNER"):
             else:
                 df = all_data.dropna()
                 
-            # Need a higher data pool depth for 60 lookback window calculations + 50 SMA
             if len(df) < 120:
                 continue
                 
@@ -249,7 +246,7 @@ if st.button(f"🔍 RUN {timeframe_filter.upper()} MULTI-STRATEGY SCANNER"):
                 if has_recent_ep:
                     bars_since_ep = execution_idx - ep_idx
                     
-                    # Track highest/lowest price since EP for flag pattern layout
+                    # Track highest/lowest price since EP for tight flag tracking
                     recent_prices = df.iloc[ep_idx+1 : execution_idx+1]['Close']
                     if len(recent_prices) > 0:
                         max_p = recent_prices.max()
@@ -265,8 +262,8 @@ if st.button(f"🔍 RUN {timeframe_filter.upper()} MULTI-STRATEGY SCANNER"):
                     if near_10 or near_20:
                         status = f"📉 PULLBACK SUPPORT ({bars_since_ep} {days_string} Ago)"
                     
-                    # --- STRUCTURE 3: LATE EP / EXTENDED CONSOLIDATION (Up to 60 Bars base) ---
-                    elif consolidation_range <= 12.0 and current_close >= df.iloc[ep_idx]['Close'] * 0.90:
+                    # --- STRUCTURE 3: LATE EP / STRICT ULTRA-TIGHT CONSOLIDATION (Max 6% Range) ---
+                    elif consolidation_range <= 6.0 and current_close >= df.iloc[ep_idx]['Close'] * 0.95:
                         status = f"⏳ LATE EP / CONSOLIDATION ({bars_since_ep} {days_string} Ago)"
             
             # Filter rows based on Sidebar Dropdown Menu Selection
@@ -297,7 +294,6 @@ if st.button(f"🔍 RUN {timeframe_filter.upper()} MULTI-STRATEGY SCANNER"):
     if scanned_data_pool:
         final_df = pd.DataFrame(scanned_data_pool)
         
-        # Safe isolated string representation for f-string compliance
         success_msg = f"🎯 **Scan Complete!** Found **{len(final_df)} Stocks** matching your structure layout: **{setup_filter}** on **{timeframe_filter}** timeframe!"
         st.success(success_msg)
         st.dataframe(final_df, use_container_width=True)
