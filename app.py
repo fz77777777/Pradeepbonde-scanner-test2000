@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 # PAGE CONFIGURATION & THEME
 # ==========================================
 st.set_page_config(
-    page_title="Stockbee Indian Market Mega-Scanner",
+    page_title="Stockbee Indian Market Ultra-Scanner",
     page_icon="⚡",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -43,7 +43,19 @@ with st.sidebar:
     vol_multiplier = st.slider("Volume Multiplier (x Volume SMA50)", min_value=1.5, max_value=6.0, value=2.5, step=0.1)
     
     st.write("---")
-    st.header("⏳ Historical Scan Point")
+    st.header("⚙️ Structure & Timeline Filters")
+    
+    # NEW: Dropdown to select the exact structural phase based on Pradeep Bonde strategy
+    setup_filter = st.selectbox(
+        "Select Setup Structure",
+        options=[
+            "All Setups Combined",
+            "Fresh EP Breakout",
+            "Late EP / Consolidation Phase",
+            "Pullback (Near 10/20 EMA)"
+        ],
+        index=0
+    )
     
     # Historical timeline dropdown selector
     scan_mode = st.selectbox(
@@ -155,13 +167,13 @@ def fetch_indian_data_batch(tickers):
 # ==========================================
 # MAIN EXECUTION LAYER
 # ==========================================
-if st.button("🔍 RUN CLEAN MULTI-CAP 2000+ SCANNER"):
+if st.button("🔍 RUN MULTI-STRATEGY 2000+ SCANNER"):
     st.write(f"⚡ Fetching parallel batch records for target block: **{scan_mode}**...")
     
     with st.spinner("Downloading structural market matrices via Parallel Engine..."):
         all_data = fetch_indian_data_batch(TICKER_LIST)
         
-    st.write("⚙️ Parsing mathematical constraints for Expansion Pivot breakouts...")
+    st.write("⚙️ Parsing mathematical constraints for structural breakouts & pullbacks...")
     scanned_data_pool = []
     
     for ticker in TICKER_LIST:
@@ -171,7 +183,7 @@ if st.button("🔍 RUN CLEAN MULTI-CAP 2000+ SCANNER"):
             else:
                 df = all_data.dropna()
                 
-            if len(df) < 65:
+            if len(df) < 70:
                 continue
                 
             df = df.copy()
@@ -181,34 +193,82 @@ if st.button("🔍 RUN CLEAN MULTI-CAP 2000+ SCANNER"):
             df['EMA_20'] = df['Close'].ewm(span=20, adjust=False).mean()
             
             total_len = len(df)
-            # Apply dropdown offset selection natively
             execution_idx = (total_len - 1) - target_offset
             
             if execution_idx < 50: 
                 continue 
                 
             row = df.iloc[execution_idx]
-            pct_chg = float(row['Pct_Change'])
-            volume = float(row['Volume'])
-            vol_sma = float(row['Vol_SMA'])
+            current_close = float(row['Close'])
+            current_ema10 = float(row['EMA_10'])
+            current_ema20 = float(row['EMA_20'])
             
-            # Pradeep Bonde Strategy Parameters
-            if pct_chg >= min_gain and volume >= (vol_multiplier * vol_sma):
-                latest_close = float(row['Close'])
-                latest_ema10 = float(row['EMA_10'])
-                latest_ema20 = float(row['EMA_20'])
+            status = None
+            trigger_gain = row['Pct_Change']
+            trigger_vol = row['Volume'] / row['Vol_SMA'] if row['Vol_SMA'] > 0 else 1.0
+            
+            # --- STRUCTURE 1: FRESH EP BREAKOUT TODAY ---
+            if row['Pct_Change'] >= min_gain and row['Volume'] >= (vol_multiplier * row['Vol_SMA']):
+                status = "🚨 FRESH EP BREAKOUT"
                 
-                status = "🚨 FRESH EP TODAY" if target_offset == 0 else f"⏳ HISTORICAL EP TRIGGERED"
+            else:
+                # --- LOOKBACK ENGINE FOR LATE EP & PULLBACKS (Checking last 10 days for an EP base) ---
+                has_recent_ep = False
+                ep_idx = -1
                 
+                for lookback in range(1, 11):
+                    check_idx = execution_idx - lookback
+                    if check_idx < 50: break
+                    
+                    past_row = df.iloc[check_idx]
+                    if past_row['Pct_Change'] >= min_gain and past_row['Volume'] >= (vol_multiplier * past_row['Vol_SMA']):
+                        has_recent_ep = True
+                        ep_idx = check_idx
+                        trigger_gain = past_row['Pct_Change']
+                        trigger_vol = past_row['Volume'] / past_row['Vol_SMA']
+                        break
+                        
+                if has_recent_ep:
+                    days_since_ep = execution_idx - ep_idx
+                    
+                    # Track highest/lowest price since EP for consolidation range mapping
+                    recent_prices = df.iloc[ep_idx+1 : execution_idx+1]['Close']
+                    if len(recent_prices) > 0:
+                        max_p = recent_prices.max()
+                        min_p = recent_prices.min()
+                        consolidation_range = ((max_p - min_p) / min_p) * 100
+                    else:
+                        consolidation_range = 0.0
+                    
+                    # --- STRUCTURE 2: PULLBACK (Near 10 EMA or 20 EMA) ---
+                    near_10 = abs(current_close - current_ema10) / current_ema10 <= 0.015
+                    near_20 = abs(current_close - current_ema20) / current_ema20 <= 0.015
+                    
+                    if near_10 or near_20:
+                        status = f"📉 PULLBACK SUPPORT ({days_since_ep} Days Ago)"
+                    
+                    # --- STRUCTURE 3: LATE EP / CONSOLIDATION PHASE ---
+                    elif consolidation_range <= 5.0 and current_close >= df.iloc[ep_idx]['Close'] * 0.95:
+                        status = f"⏳ LATE EP / CONSOLIDATION ({days_since_ep} Days Ago)"
+            
+            # Filter rows based on Sidebar Dropdown Menu Selection
+            if status:
+                if setup_filter == "Fresh EP Breakout" and "FRESH" not in status:
+                    continue
+                if setup_filter == "Late EP / Consolidation Phase" and "CONSOLIDATION" not in status:
+                    continue
+                if setup_filter == "Pullback (Near 10/20 EMA)" and "PULLBACK" not in status:
+                    continue
+                    
                 scanned_data_pool.append({
                     "Ticker Symbol": ticker.replace('.NS', ''),
                     "Company Name": TICKER_MAP.get(ticker, "Unknown"),
                     "Sector / Industry": SECTOR_MAP.get(ticker, "Other"),
-                    "Setup Status": status,
-                    "Breakout Gain %": f"{round(pct_chg, 2)}%",
-                    "Volume Multiple": f"{round(volume / vol_sma, 2)}x",
-                    "Close Price": f"₹{round(latest_close, 2)}",
-                    "Scan Trigger Date": df.index[execution_idx].strftime('%Y-%m-%d')
+                    "Setup Structure Status": status,
+                    "EP Base Gain": f"{round(trigger_gain, 2)}%",
+                    "EP Vol Multiple": f"{round(trigger_vol, 2)}x",
+                    "Target Close Price": f"₹{round(current_close, 2)}",
+                    "Scan Execution Date": df.index[execution_idx].strftime('%Y-%m-%d')
                 })
         except Exception:
             continue
@@ -218,23 +278,4 @@ if st.button("🔍 RUN CLEAN MULTI-CAP 2000+ SCANNER"):
     # Display Panel Output
     if scanned_data_pool:
         final_df = pd.DataFrame(scanned_data_pool)
-        st.success(f"🎯 **Scan Complete!** Found **{len(final_df)} Institutional Stocks** matching on timeline: {scan_mode}!")
-        st.dataframe(final_df, use_container_width=True)
-        
-        # Interactive Candlestick Component
-        priority_ticker = final_df.iloc[0]['Ticker Symbol'] + ".NS"
-        try:
-            chart_df = all_data[priority_ticker].dropna().head(execution_idx + 1).tail(90)
-            chart_df['EMA_10'] = chart_df['Close'].ewm(span=10, adjust=False).mean()
-            chart_df['EMA_20'] = chart_df['Close'].ewm(span=20, adjust=False).mean()
-            
-            fig = go.Figure()
-            fig.add_trace(go.Candlestick(x=chart_df.index, open=chart_df['Open'], high=chart_df['High'], low=chart_df['Low'], close=chart_df['Close'], name="Price"))
-            fig.add_trace(go.Scatter(x=chart_df.index, y=chart_df['EMA_10'], line=dict(color='#2b5797', width=1.5), name="10 EMA"))
-            fig.add_trace(go.Scatter(x=chart_df.index, y=chart_df['EMA_20'], line=dict(color='#d9534f', width=1.5), name="20 EMA"))
-            fig.update_layout(xaxis_rangeslider_visible=False, template="plotly_white", height=500, title=f"📈 Chart Context up to Scan Date: {priority_ticker.replace('.NS','')}")
-            st.plotly_chart(fig, use_container_width=True)
-        except Exception:
-            st.info("Chart engine layout adjusted for current data points.")
-    else:
-        st.warning(f"Is tareekh ({scan_mode}) par Large, Mid aur Small Caps mein koi setup nahi mila. Threshold sliders ko thoda kam karke check karein.")
+        st.success(f"🎯 **Scan Complete!** Found **{len(final_df)} Stocks** matching your structure layout
