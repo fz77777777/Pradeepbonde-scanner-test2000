@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 # PAGE CONFIGURATION & THEME
 # ==========================================
 st.set_page_config(
-    page_title="Stockbee Indian Market Ultra-Scanner",
+    page_title="Stockbee Indian Market Multi-Timeframe Scanner",
     page_icon="⚡",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -31,7 +31,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.title("🚀 Indian Market: Stockbee EP Mega-Scanner (2000+ Stocks)")
-st.markdown("### **Multi-Cap Institutional Momentum Engine (Large, Mid & Small Cap Only | No Microcaps)**")
+st.markdown("### **Multi-Cap & Multi-Timeframe Institutional Momentum Engine (Large, Mid & Small Cap Only)**")
 st.write("---")
 
 # ==========================================
@@ -44,6 +44,13 @@ with st.sidebar:
     
     st.write("---")
     st.header("⚙️ Structure & Timeline Filters")
+    
+    # NEW: Multi-Timeframe Selection Engine
+    timeframe_filter = st.selectbox(
+        "Select Data Timeframe",
+        options=["Daily", "Weekly", "Monthly"],
+        index=0
+    )
     
     # Dropdown to select the exact structural phase based on Pradeep Bonde strategy
     setup_filter = st.selectbox(
@@ -59,20 +66,20 @@ with st.sidebar:
     
     # Historical timeline dropdown selector
     scan_mode = st.selectbox(
-        "Select Scan Execution Date",
+        "Select Scan Execution Date (Offset)",
         options=[
-            "Current (Today's Live/Close)", "1 Day Ago", "2 Days Ago", "3 Days Ago", 
-            "4 Days Ago", "5 Days Ago", "6 Days Ago", "7 Days Ago",
-            "2 Weeks Ago", "3 Weeks Ago", "1 Month Ago", "2 Months Ago"
+            "Current (Latest Close/Live)", "1 Bar Ago", "2 Bars Ago", "3 Bars Ago", 
+            "4 Bars Ago", "5 Bars Ago", "6 Bars Ago", "7 Bars Ago",
+            "10 Bars Ago", "15 Bars Ago", "20 Bars Ago", "30 Bars Ago"
         ],
         index=0
     )
     
-    # Mapping selection to strict day offsets
+    # Mapping selection to strict bar offsets
     offset_mapping = {
-        "Current (Today's Live/Close)": 0, "1 Day Ago": 1, "2 Days Ago": 2, "3 Days Ago": 3,
-        "4 Days Ago": 4, "5 Days Ago": 5, "6 Days Ago": 6, "7 Days Ago": 7,
-        "2 Weeks Ago": 14, "3 Weeks Ago": 21, "1 Month Ago": 30, "2 Months Ago": 60
+        "Current (Latest Close/Live)": 0, "1 Bar Ago": 1, "2 Bars Ago": 2, "3 Bars Ago": 3,
+        "4 Bars Ago": 4, "5 Bars Ago": 5, "6 Bars Ago": 6, "7 Bars Ago": 7,
+        "10 Bars Ago": 10, "15 Bars Ago": 15, "20 Bars Ago": 20, "30 Bars Ago": 30
     }
     target_offset = offset_mapping[scan_mode]
 
@@ -121,7 +128,7 @@ def load_indian_mega_universe_clean():
         if series_col and series_col in df_total.columns:
             df_total = df_total[df_total[series_col].astype(str).str.upper().str.strip() == 'EQ']
             
-        # FIXED: Created a safe, explicitly closed set array to bypass bracket syntax issues
+        # Safe standard set loop to avoid unclosed bracket syntax errors
         existing_symbols = set()
         for item in base_pool:
             existing_symbols.add(item['Symbol_YF'])
@@ -158,25 +165,31 @@ SECTOR_MAP = dict(zip(master_universe['Symbol_YF'], master_universe['Sector']))
 st.info(f"📋 **System Matrix Configured:** **{len(TICKER_LIST)} Stocks** loaded (Large, Mid & Small Cap Universe). Microcaps filtered out.")
 
 # ==========================================
-# PARALLEL BATCH DATA PROCESSING ENGINE
+# MULTI-TIMEFRAME DATA PROCESSING ENGINE
 # ==========================================
 @st.cache_data(ttl=1800)
-def fetch_indian_data_batch(tickers):
+def fetch_indian_data_batch(tickers, tf):
+    # Timeframe handling
+    interval_map = {"Daily": "1d", "Weekly": "1wk", "Monthly": "1mo"}
+    yf_interval = interval_map[tf]
+    
+    # Requesting a longer lookback string for weekly/monthly calculations
     end_date = datetime.today().strftime('%Y-%m-%d')
-    start_date = (datetime.today() - timedelta(days=450)).strftime('%Y-%m-%d')
-    df = yf.download(tickers, start=start_date, end=end_date, group_by='ticker', progress=False)
+    start_date = (datetime.today() - timedelta(days=1200)).strftime('%Y-%m-%d')
+    
+    df = yf.download(tickers, start=start_date, end=end_date, interval=yf_interval, group_by='ticker', progress=False)
     return df
 
 # ==========================================
 # MAIN EXECUTION LAYER
 # ==========================================
-if st.button("🔍 RUN MULTI-STRATEGY 2000+ SCANNER"):
-    st.write(f"⚡ Fetching parallel batch records for target block: **{scan_mode}**...")
+if st.button(f"🔍 RUN {timeframe_filter.upper()} MULTI-STRATEGY SCANNER"):
+    st.write(f"⚡ Fetching parallel batch matrix for timeframe category: **{timeframe_filter}**...")
     
-    with st.spinner("Downloading structural market matrices via Parallel Engine..."):
-        all_data = fetch_indian_data_batch(TICKER_LIST)
+    with st.spinner("Downloading dynamic market intervals via Parallel Engine..."):
+        all_data = fetch_indian_data_batch(TICKER_LIST, timeframe_filter)
         
-    st.write("⚙️ Parsing mathematical constraints for structural breakouts & pullbacks...")
+    st.write(f"⚙️ Parsing Pradeep Bonde structural constraints with extended 60-Bar Lookback...")
     scanned_data_pool = []
     
     for ticker in TICKER_LIST:
@@ -186,7 +199,8 @@ if st.button("🔍 RUN MULTI-STRATEGY 2000+ SCANNER"):
             else:
                 df = all_data.dropna()
                 
-            if len(df) < 70:
+            # Need a higher data pool depth for 60 lookback window calculations + 50 SMA
+            if len(df) < 120:
                 continue
                 
             df = df.copy()
@@ -198,7 +212,7 @@ if st.button("🔍 RUN MULTI-STRATEGY 2000+ SCANNER"):
             total_len = len(df)
             execution_idx = (total_len - 1) - target_offset
             
-            if execution_idx < 50: 
+            if execution_idx < 65: 
                 continue 
                 
             row = df.iloc[execution_idx]
@@ -209,17 +223,18 @@ if st.button("🔍 RUN MULTI-STRATEGY 2000+ SCANNER"):
             status = None
             trigger_gain = row['Pct_Change']
             trigger_vol = row['Volume'] / row['Vol_SMA'] if row['Vol_SMA'] > 0 else 1.0
+            days_string = "Bars"
             
-            # --- STRUCTURE 1: FRESH EP BREAKOUT TODAY ---
+            # --- STRUCTURE 1: FRESH EP BREAKOUT TODAY / ON SELECT BAR ---
             if row['Pct_Change'] >= min_gain and row['Volume'] >= (vol_multiplier * row['Vol_SMA']):
-                status = "🚨 FRESH EP BREAKOUT"
+                status = f"🚨 FRESH {timeframe_filter.upper()} EP BREAKOUT"
                 
             else:
-                # --- LOOKBACK ENGINE FOR LATE EP & PULLBACKS ---
+                # --- EXTENDED LOOKBACK ENGINE FOR LATE EP & PULLBACKS (Checking last 60 bars!) ---
                 has_recent_ep = False
                 ep_idx = -1
                 
-                for lookback in range(1, 11):
+                for lookback in range(1, 61):
                     check_idx = execution_idx - lookback
                     if check_idx < 50: break
                     
@@ -232,9 +247,9 @@ if st.button("🔍 RUN MULTI-STRATEGY 2000+ SCANNER"):
                         break
                         
                 if has_recent_ep:
-                    days_since_ep = execution_idx - ep_idx
+                    bars_since_ep = execution_idx - ep_idx
                     
-                    # Track highest/lowest price since EP
+                    # Track highest/lowest price since EP for flag pattern layout
                     recent_prices = df.iloc[ep_idx+1 : execution_idx+1]['Close']
                     if len(recent_prices) > 0:
                         max_p = recent_prices.max()
@@ -243,16 +258,16 @@ if st.button("🔍 RUN MULTI-STRATEGY 2000+ SCANNER"):
                     else:
                         consolidation_range = 0.0
                     
-                    # --- STRUCTURE 2: PULLBACK (Near 10 EMA or 20 EMA) ---
-                    near_10 = abs(current_close - current_ema10) / current_ema10 <= 0.015
-                    near_20 = abs(current_close - current_ema20) / current_ema20 <= 0.015
+                    # --- STRUCTURE 2: PULLBACK SUPPORT ---
+                    near_10 = abs(current_close - current_ema10) / current_ema10 <= 0.02
+                    near_20 = abs(current_close - current_ema20) / current_ema20 <= 0.02
                     
                     if near_10 or near_20:
-                        status = f"📉 PULLBACK SUPPORT ({days_since_ep} Days Ago)"
+                        status = f"📉 PULLBACK SUPPORT ({bars_since_ep} {days_string} Ago)"
                     
-                    # --- STRUCTURE 3: LATE EP / CONSOLIDATION PHASE ---
-                    elif consolidation_range <= 5.0 and current_close >= df.iloc[ep_idx]['Close'] * 0.95:
-                        status = f"⏳ LATE EP / CONSOLIDATION ({days_since_ep} Days Ago)"
+                    # --- STRUCTURE 3: LATE EP / EXTENDED CONSOLIDATION (Up to 60 Bars base) ---
+                    elif consolidation_range <= 12.0 and current_close >= df.iloc[ep_idx]['Close'] * 0.90:
+                        status = f"⏳ LATE EP / CONSOLIDATION ({bars_since_ep} {days_string} Ago)"
             
             # Filter rows based on Sidebar Dropdown Menu Selection
             if status:
@@ -282,12 +297,12 @@ if st.button("🔍 RUN MULTI-STRATEGY 2000+ SCANNER"):
     if scanned_data_pool:
         final_df = pd.DataFrame(scanned_data_pool)
         
-        # Safely isolated string block
-        success_msg = f"🎯 **Scan Complete!** Found **{len(final_df)} Stocks** matching your structure layout: **{setup_filter}**!"
+        # Safe isolated string representation for f-string compliance
+        success_msg = f"🎯 **Scan Complete!** Found **{len(final_df)} Stocks** matching your structure layout: **{setup_filter}** on **{timeframe_filter}** timeframe!"
         st.success(success_msg)
         st.dataframe(final_df, use_container_width=True)
         
-        # Interactive Candlestick Component
+        # Interactive Multi-Timeframe Candlestick Component
         priority_ticker = final_df.iloc[0]['Ticker Symbol'] + ".NS"
         try:
             chart_df = all_data[priority_ticker].dropna().head(execution_idx + 1).tail(90)
@@ -299,11 +314,11 @@ if st.button("🔍 RUN MULTI-STRATEGY 2000+ SCANNER"):
             fig.add_trace(go.Scatter(x=chart_df.index, y=chart_df['EMA_10'], line=dict(color='#2b5797', width=1.5), name="10 EMA"))
             fig.add_trace(go.Scatter(x=chart_df.index, y=chart_df['EMA_20'], line=dict(color='#d9534f', width=1.5), name="20 EMA"))
             
-            chart_title = f"📈 Chart Context up to Scan Date: {priority_ticker.replace('.NS','')}"
+            chart_title = f"📈 {timeframe_filter} Chart Context up to Scan Point: {priority_ticker.replace('.NS','')}"
             fig.update_layout(xaxis_rangeslider_visible=False, template="plotly_white", height=500, title=chart_title)
             st.plotly_chart(fig, use_container_width=True)
         except Exception:
             st.info("Chart engine layout adjusted for current data points.")
     else:
-        warning_msg = f"Is target date par is dynamic category (**{setup_filter}**) ka koi stock nahi mila. Filter parameters ko thoda kam karke dekhein."
+        warning_msg = f"Is target criteria par is dynamic timeframe (**{timeframe_filter}**) ka koi stock nahi mila. Sliders ko thoda optimize karke dekhein."
         st.warning(warning_msg)
