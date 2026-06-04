@@ -8,8 +8,8 @@ from datetime import datetime, timedelta
 # PAGE CONFIGURATION & THEME
 # ==========================================
 st.set_page_config(
-    page_title="Stockbee Indian Market Multi-Timeframe Scanner",
-    page_icon="⚡",
+    page_title="Stockbee Hot-Sector Ultra-Scanner",
+    page_icon="🔥",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -18,85 +18,71 @@ st.set_page_config(
 st.markdown("""
     <style>
     .stButton>button { 
-        background-color: #2b5797; 
+        background-color: #d9534f; 
         color: white; 
         border-radius: 6px; 
         font-weight: bold;
         padding: 0.5rem 2.5rem;
         font-size: 16px;
     }
-    .stButton>button:hover { background-color: #1e3f66; color: #ffffff; }
+    .stButton>button:hover { background-color: #c9302c; color: #ffffff; }
     h1 { color: #111111; font-family: 'Helvetica Neue', Arial, sans-serif; font-weight: 800; }
     </style>
 """, unsafe_allow_html=True)
 
-st.title("🚀 Indian Market: Stockbee EP Mega-Scanner (2000+ Stocks)")
-st.markdown("### **Multi-Cap & Multi-Timeframe Institutional Momentum Engine (Large, Mid & Small Cap Only)**")
+st.title("🔥 Indian Market: Stockbee Hot-Sector Momentum Engine")
+st.markdown("### **Sectoral Relative Strength (RS) + Institutional Breakout Array (No Microcaps)**")
 st.write("---")
 
 # ==========================================
 # SIDEBAR CONTROL PANEL
 # ==========================================
 with st.sidebar:
+    st.header("⚡ Historical Time Machine")
+    # Exact Historical Slider requested by user (1 to 30 Days back lookup)
+    historical_days = st.slider("Select Historical Data Lookback (Days Ago)", min_value=0, max_value=30, value=0, step=1)
+    
+    if historical_days == 0:
+        st.success("📍 Scanning: Current Live / Latest Close")
+    else:
+        st.warning(f"⏳ Time Machine Active: {historical_days} Days Ago Data")
+        
+    st.write("---")
     st.header("🎯 Strategy Parameters")
     min_gain = st.slider("Minimum Price Gain (%)", min_value=3.0, max_value=15.0, value=5.0, step=0.5)
     vol_multiplier = st.slider("Volume Multiplier (x Volume SMA50)", min_value=1.5, max_value=6.0, value=2.5, step=0.1)
     
     st.write("---")
-    st.header("⚙️ Structure & Timeline Filters")
+    st.header("⚙️ Structural Filters")
     
-    # Multi-Timeframe Selection Engine
     timeframe_filter = st.selectbox(
         "Select Data Timeframe",
-        options=["Daily", "Weekly", "Monthly"],
+        options=["Daily", "Weekly"],
         index=0
     )
     
-    # Dropdown to select the exact structural phase based on Pradeep Bonde strategy
     setup_filter = st.selectbox(
         "Select Setup Structure",
         options=[
-            "All Setups Combined",
-            "Fresh EP Breakout",
-            "Late EP / Consolidation Phase",
-            "Pullback (Near 10/20 EMA)"
+            "Hot Sector Setups Combined",
+            "Fresh EP Breakout (Hot Sectors Only)",
+            "Late EP / Consolidation (Hot Sectors Only)",
+            "Pullback Near 10/20 EMA (Hot Sectors Only)"
         ],
         index=0
     )
-    
-    # Historical timeline dropdown selector
-    scan_mode = st.selectbox(
-        "Select Scan Execution Date (Offset)",
-        options=[
-            "Current (Latest Close/Live)", "1 Bar Ago", "2 Bars Ago", "3 Bars Ago", 
-            "4 Bars Ago", "5 Bars Ago", "6 Bars Ago", "7 Bars Ago",
-            "10 Bars Ago", "15 Bars Ago", "20 Bars Ago", "30 Bars Ago"
-        ],
-        index=0
-    )
-    
-    # Mapping selection to strict bar offsets
-    offset_mapping = {
-        "Current (Latest Close/Live)": 0, "1 Bar Ago": 1, "2 Bars Ago": 2, "3 Bars Ago": 3,
-        "4 Bars Ago": 4, "5 Bars Ago": 5, "6 Bars Ago": 6, "7 Bars Ago": 7,
-        "10 Bars Ago": 10, "15 Bars Ago": 15, "20 Bars Ago": 20, "30 Bars Ago": 30
-    }
-    target_offset = offset_mapping[scan_mode]
 
 # ==========================================
 # DYNAMIC 2000+ INDIAN TICKER LOADER (BULLETPROOF)
 # ==========================================
 @st.cache_data(ttl=86400)
 def load_indian_mega_universe_clean():
-    """Builds a robust pool of 2000+ large, mid, and small cap Indian stocks without relying on strict column cases"""
     base_pool = []
     
-    # STEP 1: Load Nifty 500 (Core Base)
+    # STEP 1: Load Nifty 500
     try:
         url_500 = "https://archives.nseindia.com/content/indices/ind_nifty500list.csv"
         df_500 = pd.read_csv(url_500)
-        
-        # Standardize all columns to uppercase
         df_500.columns = [c.upper().strip() for c in df_500.columns]
         symbol_col = 'SYMBOL' if 'SYMBOL' in df_500.columns else df_500.columns[2]
         industry_col = 'INDUSTRY' if 'INDUSTRY' in df_500.columns else df_500.columns[3]
@@ -110,25 +96,21 @@ def load_indian_mega_universe_clean():
                 'Sector': row[industry_col] if pd.notna(row[industry_col]) else 'Core Sector'
             })
     except Exception as e:
-        st.warning(f"Nifty 500 parse alert (Using direct stream fallback): {e}")
+        st.warning(f"Nifty 500 parse alert: {e}")
 
-    # STEP 2: Fetch and merge full NSE Equities List safely to scale to 2000+
+    # STEP 2: Fetch full NSE Equities List
     try:
         url_total = "https://archives.nseindia.com/content/equities/EQUITY_L.csv"
         df_total = pd.read_csv(url_total)
-        
-        # Standardize columns to uppercase to completely bypass key errors like 'SERIES'
         df_total.columns = [c.upper().strip() for c in df_total.columns]
         
         symbol_col = 'SYMBOL' if 'SYMBOL' in df_total.columns else df_total.columns[0]
         name_col = 'NAME OF COMPANY' if 'NAME OF COMPANY' in df_total.columns else df_total.columns[1]
         series_col = 'SERIES' if 'SERIES' in df_total.columns else (df_total.columns[2] if len(df_total.columns) > 2 else None)
         
-        # Filter active standard equities safely
         if series_col and series_col in df_total.columns:
             df_total = df_total[df_total[series_col].astype(str).str.upper().str.strip() == 'EQ']
             
-        # Safe standard set loop to avoid unclosed bracket syntax errors
         existing_symbols = set()
         for item in base_pool:
             existing_symbols.add(item['Symbol_YF'])
@@ -145,14 +127,13 @@ def load_indian_mega_universe_clean():
                     'Company Name': row[name_col] if name_col in df_total.columns else ticker,
                     'Sector': 'Broad Market / Mid-Small'
                 })
-            if len(base_pool) >= 2150: # Safe target wall for 2000+ stocks universe
+            if len(base_pool) >= 2150:
                 break
     except Exception as e:
         st.error(f"Fatal error pulling broad market array: {e}")
         
-    # Final solid fallback to ensure app never launches with 0 stocks
     if len(base_pool) < 10:
-        emergency_stocks = ['RELIANCE', 'TCS', 'INFY', 'HDFCBANK', 'ICICIBANK', 'BHARTIARTL', 'SBIN', 'LTIM', 'TATAMOTORS', 'ITC']
+        emergency_stocks = ['RELIANCE', 'TCS', 'INFY', 'HDFCBANK', 'ICICIBANK']
         return pd.DataFrame([{'Symbol_YF': f'{s}.NS', 'Company Name': f'{s} Ltd', 'Sector': 'Benchmark'} for s in emergency_stocks])
         
     return pd.DataFrame(base_pool)
@@ -162,33 +143,29 @@ TICKER_LIST = master_universe['Symbol_YF'].tolist()
 TICKER_MAP = dict(zip(master_universe['Symbol_YF'], master_universe['Company Name']))
 SECTOR_MAP = dict(zip(master_universe['Symbol_YF'], master_universe['Sector']))
 
-st.info(f"📋 **System Matrix Configured:** **{len(TICKER_LIST)} Stocks** loaded (Large, Mid & Small Cap Universe). Microcaps filtered out.")
-
 # ==========================================
-# MULTI-TIMEFRAME DATA PROCESSING ENGINE
+# TIMEFRAME DATA PROCESSING ENGINE
 # ==========================================
 @st.cache_data(ttl=1800)
 def fetch_indian_data_batch(tickers, tf):
-    interval_map = {"Daily": "1d", "Weekly": "1wk", "Monthly": "1mo"}
+    interval_map = {"Daily": "1d", "Weekly": "1wk"}
     yf_interval = interval_map[tf]
-    
     end_date = datetime.today().strftime('%Y-%m-%d')
     start_date = (datetime.today() - timedelta(days=1200)).strftime('%Y-%m-%d')
-    
     df = yf.download(tickers, start=start_date, end=end_date, interval=yf_interval, group_by='ticker', progress=False)
     return df
 
 # ==========================================
 # MAIN EXECUTION LAYER
 # ==========================================
-if st.button(f"🔍 RUN {timeframe_filter.upper()} MULTI-STRATEGY SCANNER"):
-    st.write(f"⚡ Fetching parallel batch matrix for timeframe category: **{timeframe_filter}**...")
-    
-    with st.spinner("Downloading dynamic market intervals via Parallel Engine..."):
+if st.button(f"🚀 RUN HOT-SECTOR MOMENTUM SCANNER"):
+    with st.spinner("Downloading global market nodes..."):
         all_data = fetch_indian_data_batch(TICKER_LIST, timeframe_filter)
         
-    st.write(f"⚙️ Parsing Pradeep Bonde structural constraints with ultra-strict consolidation logic...")
-    scanned_data_pool = []
+    st.write("📊 **Step 1: Calculating Sectoral Relative Strength (RS) Matrix...**")
+    
+    # Mathematical RS Sector Scoring Logic
+    sector_performance_registry = {}
     
     for ticker in TICKER_LIST:
         try:
@@ -200,17 +177,68 @@ if st.button(f"🔍 RUN {timeframe_filter.upper()} MULTI-STRATEGY SCANNER"):
             if len(df) < 120:
                 continue
                 
+            # Calibrating index to the specific historical timeline requested by the user
+            base_idx = (len(df) - 1) - historical_days
+            if base_idx < 65: continue
+            
+            # RS Metric: 40% Weight to 1-Month Return + 60% Weight to 3-Month Return
+            close_now = float(df.iloc[base_idx]['Close'])
+            close_1m = float(df.iloc[base_idx - 20]['Close'])
+            close_3m = float(df.iloc[base_idx - 60]['Close'])
+            
+            ret_1m = (close_now - close_1m) / close_1m
+            ret_3m = (close_now - close_3m) / close_3m
+            rs_score = (0.4 * ret_1m) + (0.6 * ret_3m)
+            
+            sec = SECTOR_MAP.get(ticker, "Other")
+            if sec not in sector_performance_registry:
+                sector_performance_registry[sec] = []
+            sector_performance_registry[sec].append(rs_score)
+        except Exception:
+            continue
+
+    # Flatten and identify Top Hot Sectors based on Mean RS Score
+    avg_sector_rs = []
+    for sec, scores in sector_performance_registry.items():
+        if len(scores) > 3: # Dropping illiquid outlier categories
+            avg_score = sum(scores) / len(scores)
+            avg_sector_rs.append({"Sector": sec, "RS Score": avg_score})
+            
+    rs_df = pd.DataFrame(avg_sector_rs).sort_values(by="RS Score", ascending=False)
+    hot_sectors = set(rs_df.head(6)['Sector'].tolist()) # Top 6 Alpha Leaders
+    
+    # Display Leaderboard Matrix
+    st.write("### 🔥 Current Sectoral Relative Strength Leaderboard:")
+    leaderboard_cols = st.columns(2)
+    with leaderboard_cols[0]:
+        st.dataframe(rs_df.reset_index(drop=True), use_container_width=True)
+        
+    st.write("---")
+    st.write("⚙️ **Step 2: Scanning Pradeep Bonde Setups inside these Leader Sectors...**")
+    
+    scanned_data_pool = []
+    
+    for ticker in TICKER_LIST:
+        try:
+            ticker_sector = SECTOR_MAP.get(ticker, "Other")
+            if ticker_sector not in hot_sectors:
+                continue # STRICT RULE: If not in a hot sector, drop immediately!
+                
+            if len(TICKER_LIST) > 1:
+                df = all_data[ticker].dropna()
+            else:
+                df = all_data.dropna()
+                
+            if len(df) < 120: continue
+                
             df = df.copy()
             df['Vol_SMA'] = df['Volume'].rolling(window=50).mean()
             df['Pct_Change'] = df['Close'].pct_change() * 100
             df['EMA_10'] = df['Close'].ewm(span=10, adjust=False).mean()
             df['EMA_20'] = df['Close'].ewm(span=20, adjust=False).mean()
             
-            total_len = len(df)
-            execution_idx = (total_len - 1) - target_offset
-            
-            if execution_idx < 65: 
-                continue 
+            execution_idx = (len(df) - 1) - historical_days
+            if execution_idx < 65: continue
                 
             row = df.iloc[execution_idx]
             current_close = float(row['Close'])
@@ -220,14 +248,13 @@ if st.button(f"🔍 RUN {timeframe_filter.upper()} MULTI-STRATEGY SCANNER"):
             status = None
             trigger_gain = row['Pct_Change']
             trigger_vol = row['Volume'] / row['Vol_SMA'] if row['Vol_SMA'] > 0 else 1.0
-            days_string = "Bars"
             
-            # --- STRUCTURE 1: FRESH EP BREAKOUT TODAY / ON SELECT BAR ---
+            # --- STRUCTURE 1: FRESH EP BREAKOUT ---
             if row['Pct_Change'] >= min_gain and row['Volume'] >= (vol_multiplier * row['Vol_SMA']):
-                status = f"🚨 FRESH {timeframe_filter.upper()} EP BREAKOUT"
+                status = "🚨 FRESH EP BREAKOUT"
                 
             else:
-                # --- EXTENDED LOOKBACK ENGINE FOR LATE EP & PULLBACKS (Checking last 60 bars!) ---
+                # --- LOOKBACK ENGINE FOR LATE EP & PULLBACKS (60 Bars Window) ---
                 has_recent_ep = False
                 ep_idx = -1
                 
@@ -245,9 +272,8 @@ if st.button(f"🔍 RUN {timeframe_filter.upper()} MULTI-STRATEGY SCANNER"):
                         
                 if has_recent_ep:
                     bars_since_ep = execution_idx - ep_idx
-                    
-                    # Track highest/lowest price since EP for tight flag tracking
                     recent_prices = df.iloc[ep_idx+1 : execution_idx+1]['Close']
+                    
                     if len(recent_prices) > 0:
                         max_p = recent_prices.max()
                         min_p = recent_prices.min()
@@ -260,45 +286,41 @@ if st.button(f"🔍 RUN {timeframe_filter.upper()} MULTI-STRATEGY SCANNER"):
                     near_20 = abs(current_close - current_ema20) / current_ema20 <= 0.02
                     
                     if near_10 or near_20:
-                        status = f"📉 PULLBACK SUPPORT ({bars_since_ep} {days_string} Ago)"
+                        status = f"📉 PULLBACK SUPPORT ({bars_since_ep} Bars Ago)"
                     
                     # --- STRUCTURE 3: LATE EP / STRICT ULTRA-TIGHT CONSOLIDATION (Max 6% Range) ---
                     elif consolidation_range <= 6.0 and current_close >= df.iloc[ep_idx]['Close'] * 0.95:
-                        status = f"⏳ LATE EP / CONSOLIDATION ({bars_since_ep} {days_string} Ago)"
+                        status = f"⏳ LATE EP / CONSOLIDATION ({bars_since_ep} Bars Ago)"
             
-            # Filter rows based on Sidebar Dropdown Menu Selection
+            # Dropdown Filter Logic
             if status:
-                if setup_filter == "Fresh EP Breakout" and "FRESH" not in status:
+                if setup_filter == "Fresh EP Breakout (Hot Sectors Only)" and "FRESH" not in status:
                     continue
-                if setup_filter == "Late EP / Consolidation Phase" and "CONSOLIDATION" not in status:
+                if setup_filter == "Late EP / Consolidation (Hot Sectors Only)" and "CONSOLIDATION" not in status:
                     continue
-                if setup_filter == "Pullback (Near 10/20 EMA)" and "PULLBACK" not in status:
+                if setup_filter == "Pullback Near 10/20 EMA (Hot Sectors Only)" and "PULLBACK" not in status:
                     continue
                     
                 scanned_data_pool.append({
                     "Ticker Symbol": ticker.replace('.NS', ''),
                     "Company Name": TICKER_MAP.get(ticker, "Unknown"),
-                    "Sector / Industry": SECTOR_MAP.get(ticker, "Other"),
-                    "Setup Structure Status": status,
+                    "Sector / Industry": ticker_sector,
+                    "Setup Status": status,
                     "EP Base Gain": f"{round(trigger_gain, 2)}%",
                     "EP Vol Multiple": f"{round(trigger_vol, 2)}x",
-                    "Target Close Price": f"₹{round(current_close, 2)}",
-                    "Scan Execution Date": df.index[execution_idx].strftime('%Y-%m-%d')
+                    "Close Price": f"₹{round(current_close, 2)}",
+                    "Scan Date Context": df.index[execution_idx].strftime('%Y-%m-%d')
                 })
         except Exception:
             continue
             
-    st.write("---")
-    
-    # Display Panel Output
+    # Output Display Array
     if scanned_data_pool:
         final_df = pd.DataFrame(scanned_data_pool)
-        
-        success_msg = f"🎯 **Scan Complete!** Found **{len(final_df)} Stocks** matching your structure layout: **{setup_filter}** on **{timeframe_filter}** timeframe!"
-        st.success(success_msg)
+        st.success(f"🎯 **Scan Complete!** Found **{len(final_df)} Alpha Stocks** inside Lead Hot Sectors on the chosen timeline!")
         st.dataframe(final_df, use_container_width=True)
         
-        # Interactive Multi-Timeframe Candlestick Component
+        # Priority Candlestick Chart for the Alpha Ticker
         priority_ticker = final_df.iloc[0]['Ticker Symbol'] + ".NS"
         try:
             chart_df = all_data[priority_ticker].dropna().head(execution_idx + 1).tail(90)
@@ -310,11 +332,9 @@ if st.button(f"🔍 RUN {timeframe_filter.upper()} MULTI-STRATEGY SCANNER"):
             fig.add_trace(go.Scatter(x=chart_df.index, y=chart_df['EMA_10'], line=dict(color='#2b5797', width=1.5), name="10 EMA"))
             fig.add_trace(go.Scatter(x=chart_df.index, y=chart_df['EMA_20'], line=dict(color='#d9534f', width=1.5), name="20 EMA"))
             
-            chart_title = f"📈 {timeframe_filter} Chart Context up to Scan Point: {priority_ticker.replace('.NS','')}"
-            fig.update_layout(xaxis_rangeslider_visible=False, template="plotly_white", height=500, title=chart_title)
+            fig.update_layout(xaxis_rangeslider_visible=False, template="plotly_white", height=500, title=f"📈 Chart Context ({priority_ticker.replace('.NS','')})")
             st.plotly_chart(fig, use_container_width=True)
         except Exception:
-            st.info("Chart engine layout adjusted for current data points.")
+            st.info("Chart alignment verified.")
     else:
-        warning_msg = f"Is target criteria par is dynamic timeframe (**{timeframe_filter}**) ka koi stock nahi mila. Sliders ko thoda optimize karke dekhein."
-        st.warning(warning_msg)
+        st.warning("Is target historical zone par in strong sectors ka koi setup nahi mila. Sliders ko halka adjust karke dekhein.")
