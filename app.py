@@ -155,6 +155,46 @@ def fetch_indian_data_batch(tickers, tf):
     df = yf.download(tickers, start=start_date, end=end_date, interval=yf_interval, group_by='ticker', progress=False)
     return df
 
+# ADDED FEATURE: DUAL QUARTER COMPILER FOR SCAN RESULTS
+def fetch_dual_quarterly_growth(ticker_raw):
+    """
+    Extracts core financial revenue elements from yfinance
+    and yields individual percentage changes for the last two cycles.
+    """
+    curr_g = "Data N/A"
+    prev_g = "Data N/A"
+    try:
+        ticker_obj = yf.Ticker(ticker_raw)
+        funda_matrix = ticker_obj.quarterly_financials
+        
+        revenue_labels = ['Total Revenue', 'Gross Sales', 'Operating Revenue']
+        target_key = None
+        for key in revenue_labels:
+            if key in funda_matrix.index:
+                target_key = key
+                break
+                
+        if target_key is not None:
+            revenue_stream = funda_matrix.loc[target_key].dropna()
+            
+            if len(revenue_stream) >= 3:
+                q0_latest = float(revenue_stream.iloc[0])
+                q1_prior = float(revenue_stream.iloc[1])
+                q2_older = float(revenue_stream.iloc[2])
+                
+                if q1_prior > 0:
+                    curr_g = f"{round(((q0_latest - q1_prior) / q1_prior) * 100, 2)}%"
+                if q2_older > 0:
+                    prev_g = f"{round(((q1_prior - q2_older) / q2_older) * 100, 2)}%"
+            elif len(revenue_stream) == 2:
+                q0_latest = float(revenue_stream.iloc[0])
+                q1_prior = float(revenue_stream.iloc[1])
+                if q1_prior > 0:
+                    curr_g = f"{round(((q0_latest - q1_prior) / q1_prior) * 100, 2)}%"
+    except Exception:
+        pass
+    return curr_g, prev_g
+
 # ==========================================
 # MAIN EXECUTION LAYER
 # ==========================================
@@ -300,11 +340,16 @@ if st.button(f"🚀 RUN HOT-SECTOR MOMENTUM SCANNER"):
                     continue
                 if setup_filter == "Pullback Near 10/20 EMA (Hot Sectors Only)" and "PULLBACK" not in status:
                     continue
+                
+                # Fetching the dual data parameters
+                c_q_sales, p_q_sales = fetch_dual_quarterly_growth(ticker)
                     
                 scanned_data_pool.append({
                     "Ticker Symbol": ticker.replace('.NS', ''),
                     "Company Name": TICKER_MAP.get(ticker, "Unknown"),
                     "Sector / Industry": ticker_sector,
+                    "Current Qtr Sales Growth": c_q_sales,
+                    "Prev Qtr Sales Growth": p_g_sales if 'p_g_sales' in locals() else p_q_sales,
                     "Setup Status": status,
                     "EP Base Gain": f"{round(trigger_gain, 2)}%",
                     "EP Vol Multiple": f"{round(trigger_vol, 2)}x",
